@@ -26,7 +26,7 @@ env:
 
   
   IMAGE_TAG: ${{ github.sha }}          # every image is tagged with the commit SHA
-  DOCKERFILE: ./Dockerfile
+  #DOCKERFILE: ./Dockerfile
   
 jobs:
 
@@ -166,7 +166,8 @@ jobs:
         run: |
           kubectl create secret generic taskly-secrets \
             --from-literal=DB1_URL=${{ secrets.DATABASE_URL }} \
-            --from-literal=REDIS_URL=${{ secrets.REDIS_URL }}
+            --from-literal=REDIS_URL=${{ secrets.REDIS_URL }} \
+            --dry-run=client -o yaml | kubectl apply -f -
 
         # Apply Kubernetes Manifests
       - name: Apply Kubernetes Manifests
