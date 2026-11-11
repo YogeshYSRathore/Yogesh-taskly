@@ -24,10 +24,6 @@ env:
   ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
   IMAGE_NAME: ${{ vars.ACR_REPOSITORY }}
 
-  DATABASE_USER: ${{ secrets.DATABASE_USER }}
-  DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
-  REDIS_PASSWORD_KEY: ${{ secrets.REDIS_PASSWORD_KEY }}
-
   
   IMAGE_TAG: ${{ github.sha }}          # every image is tagged with the commit SHA
   DOCKERFILE: ./Dockerfile
@@ -169,10 +165,9 @@ jobs:
       - name: create secret for taskly-secrets
         run: |
           kubectl create secret generic taskly-secrets \
-            --from-literal=DB1_URL="postgresql://DATABASE_USER:DATABASE_PASSWORD@taskly-staging-yogesh-postgres.postgres.database.azure.com:5432/tasklydb?sslmode=require" \
-            --from-literal=REDIS_URL="rediss://REDIS_PASSWORD_KEY@taskly-staging-yogesh-redis.redis.cache.windows.net:6380/0"
-   
-            
+            --from-literal=DB1_URL=${{ secrets.DATABASE_URL }} \
+            --from-literal=REDIS_URL=${{ secrets.REDIS_URL }}
+
         # Apply Kubernetes Manifests
       - name: Apply Kubernetes Manifests
         run: kubectl apply -f k8s/
