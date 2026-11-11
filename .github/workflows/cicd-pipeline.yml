@@ -186,58 +186,58 @@ jobs:
             --timeout=180s
 
 
-  # ----------------------------------
-  # 4. DEPLOY TO PRODUCTION
-  # ----------------------------------
+  # # ----------------------------------
+  # # 4. DEPLOY TO PRODUCTION
+  # # ----------------------------------
 
-  deploy-production:
-    name: Deploy to Production
-    needs:
-      - build-scan-push
-      - deploy-staging
+  # deploy-production:
+  #   name: Deploy to Production
+  #   needs:
+  #     - build-scan-push
+  #     - deploy-staging
 
-    runs-on: ubuntu-latest
+  #   runs-on: ubuntu-latest
 
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+  #   if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
 
-    # GitHub Environment protection rules provide
-    # the manual approval gate.
-    environment: production
+  #   # GitHub Environment protection rules provide
+  #   # the manual approval gate.
+  #   environment: production
 
-    steps:
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  #   steps:
+  #     - name: Azure Login
+  #       uses: azure/login@v2
+  #       with:
+  #         client-id: ${{ secrets.AZURE_CLIENT_ID }}
+  #         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+  #         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Connect to Production AKS
-        uses: azure/aks-set-context@v4
-        with:
-          resource-group: ${{ vars.AKS_PRODUCTION_RESOURCE_GROUP }}
-          cluster-name: ${{ vars.AKS_PRODUCTION_CLUSTER }}
+  #     - name: Connect to Production AKS
+  #       uses: azure/aks-set-context@v4
+  #       with:
+  #         resource-group: ${{ vars.AKS_PRODUCTION_RESOURCE_GROUP }}
+  #         cluster-name: ${{ vars.AKS_PRODUCTION_CLUSTER }}
 
-      - name: Deploy Taskly to Production
-        run: |
-          kubectl set image deployment/taskly \
-            taskly=${{ needs.build-scan-push.outputs.image }} \
-            -n production
+  #     - name: Deploy Taskly to Production
+  #       run: |
+  #         kubectl set image deployment/taskly \
+  #           taskly=${{ needs.build-scan-push.outputs.image }} \
+  #           -n production
 
-      - name: Verify Production Deployment
-        run: |
-          kubectl rollout status deployment/taskly \
-            -n production \
-            --timeout=180s
+  #     - name: Verify Production Deployment
+  #       run: |
+  #         kubectl rollout status deployment/taskly \
+  #           -n production \
+  #           --timeout=180s
 
-      # Automatically restore previous revision
-      # if production deployment fails.
-      - name: Rollback Production on Failure
-        if: failure()
-        continue-on-error: true
-        run: |
-          echo "Production deployment failed. Rolling back..."
-          kubectl rollout undo deployment/taskly -n production
-          kubectl rollout status deployment/taskly \
-            -n production \
-            --timeout=180s
+  #     # Automatically restore previous revision
+  #     # if production deployment fails.
+  #     - name: Rollback Production on Failure
+  #       if: failure()
+  #       continue-on-error: true
+  #       run: |
+  #         echo "Production deployment failed. Rolling back..."
+  #         kubectl rollout undo deployment/taskly -n production
+  #         kubectl rollout status deployment/taskly \
+  #           -n production \
+  #           --timeout=180s
