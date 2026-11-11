@@ -21,9 +21,9 @@ spec:
       containers:
         - name: taskly-container
 
-          image: YOUR_ACR_NAME.azurecr.io/YOUR_IMAGE_NAME:YOUR_TAG
+          image: tasklyacryogesh.azurecr.io/taskly:latest
 
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
 
           ports:
             - name: http

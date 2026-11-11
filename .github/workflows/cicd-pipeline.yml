@@ -27,7 +27,7 @@ env:
   
   IMAGE_TAG: ${{ github.sha }}          # every image is tagged with the commit SHA
   #DOCKERFILE: ./Dockerfile
-  
+  K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE }}
 jobs:
 
   # ----------------------
