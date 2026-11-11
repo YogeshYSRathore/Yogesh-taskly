@@ -1,0 +1,245 @@
+name: Taskly CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+  pull_request:
+    branches:
+      - main
+      - develop
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  #id-token: write
+
+concurrency:
+  group: taskly-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ACR_NAME: ${{ vars.ACR_NAME }}
+  ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+  IMAGE_NAME: ${{ vars.ACR_REPOSITORY }}
+  
+  IMAGE_TAG: ${{ github.sha }}          # every image is tagged with the commit SHA
+  DOCKERFILE: ./Dockerfile
+
+jobs:
+
+  # ----------------------
+  # 1. TEST using pytest 
+  # ---------------------
+  test:
+    name: Python Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run Python Tests with Coverage
+        run: |
+          pytest --cov=. --cov-report=xml
+
+      - name: Verify Coverage Report
+        run: |
+          test -f coverage.xml
+          echo "Coverage report generated successfully"
+
+
+  # ----------------------------------
+  # 2. BUILD + SCAN + PUSH
+  # ----------------------------------
+
+  build-scan-push:
+    name: Build, Scan and Push Image
+    needs: test
+    runs-on: ubuntu-latest
+
+    # Only publish images from main/develop pushes,
+    # not pull requests.
+    if: github.event_name != 'pull_request'
+
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Generate Image Tag
+        id: image
+        run: |
+          IMAGE="${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${IMAGE_TAG}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Building image: $IMAGE"
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t "${{ steps.image.outputs.image }}" \
+            .
+
+      # ----------------------------------
+      # SECURITY SCANNING
+      # ----------------------------------
+
+      - name: Scan Docker Image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.image.outputs.image }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
+      # ----------------------------------
+      # AZURE LOGIN USING OIDC
+      # ----------------------------------
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ----------------------------------
+      # PUSH TO AZURE CONTAINER REGISTRY
+      # ----------------------------------
+
+      - name: Login to Azure Container Registry
+        run: |
+          az acr login --name "$ACR_NAME"
+
+      - name: Push Docker Image
+        run: |
+          docker push "${{ steps.image.outputs.image }}"
+
+
+  # ----------------------------------
+  # 3. DEPLOY TO STAGING
+  # ----------------------------------
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build-scan-push
+    runs-on: ubuntu-latest
+
+    if: github.event_name != 'pull_request'
+
+    environment: staging
+
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Connect to Staging AKS
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AKS_STAGING_RESOURCE_GROUP }}
+          cluster-name: ${{ vars.AKS_STAGING_CLUSTER }}
+
+      - name: Deploy Taskly to Staging
+        run: |
+          kubectl set image deployment/taskly \
+            taskly=${{ needs.build-scan-push.outputs.image }} \
+            -n staging
+
+      - name: Verify Staging Deployment
+        run: |
+          kubectl rollout status deployment/taskly \
+            -n staging \
+            --timeout=180s
+
+      # Automatically restore previous revision
+      # if the new deployment fails.
+      - name: Rollback Staging on Failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          echo "Deployment failed. Rolling back staging..."
+          kubectl rollout undo deployment/taskly -n staging
+          kubectl rollout status deployment/taskly \
+            -n staging \
+            --timeout=180s
+
+
+  # ----------------------------------
+  # 4. DEPLOY TO PRODUCTION
+  # ----------------------------------
+
+  deploy-production:
+    name: Deploy to Production
+    needs:
+      - build-scan-push
+      - deploy-staging
+
+    runs-on: ubuntu-latest
+
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+
+    # GitHub Environment protection rules provide
+    # the manual approval gate.
+    environment: production
+
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Connect to Production AKS
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AKS_PRODUCTION_RESOURCE_GROUP }}
+          cluster-name: ${{ vars.AKS_PRODUCTION_CLUSTER }}
+
+      - name: Deploy Taskly to Production
+        run: |
+          kubectl set image deployment/taskly \
+            taskly=${{ needs.build-scan-push.outputs.image }} \
+            -n production
+
+      - name: Verify Production Deployment
+        run: |
+          kubectl rollout status deployment/taskly \
+            -n production \
+            --timeout=180s
+
+      # Automatically restore previous revision
+      # if production deployment fails.
+      - name: Rollback Production on Failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          echo "Production deployment failed. Rolling back..."
+          kubectl rollout undo deployment/taskly -n production
+          kubectl rollout status deployment/taskly \
+            -n production \
+            --timeout=180s
