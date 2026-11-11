@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: taskly-service
+  namespace: taskly-staging
+
+spec:
+  type: LoadBalancer
+
+  selector:
+    app: taskly
+
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
