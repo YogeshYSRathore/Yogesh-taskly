@@ -175,7 +175,7 @@ jobs:
             
         # Apply Kubernetes Manifests
       - name: Apply Kubernetes Manifests
-        run: kubectl apply -f git/
+        run: kubectl apply -f k8s/
       
       - name: Deploy Taskly to Staging
         run: |
