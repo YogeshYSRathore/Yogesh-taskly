@@ -178,13 +178,13 @@ jobs:
       
       - name: Deploy Taskly to Staging
         run: |
-          kubectl set image deployment/taskly \
+          kubectl set image deployment/taskly-deployment \
             taskly=${{ needs.build-scan-push.outputs.image }} \
             -n staging
 
       - name: Verify Staging Deployment
         run: |
-          kubectl rollout status deployment/taskly \
+          kubectl rollout status deployment/taskly-deployment \
             -n staging \
             --timeout=180s
       
@@ -215,8 +215,8 @@ jobs:
         continue-on-error: true
         run: |
           echo "Deployment failed. Rolling back staging..."
-          kubectl rollout undo deployment/taskly -n staging
-          kubectl rollout status deployment/taskly \
+          kubectl rollout undo deployment/taskly-deployment -n staging
+          kubectl rollout status deployment/taskly-deployment \
             -n staging \
             --timeout=180s
 
