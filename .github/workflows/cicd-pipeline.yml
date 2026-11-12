@@ -176,7 +176,7 @@ jobs:
       - name: Apply Kubernetes Manifests
         #run: kubectl apply -f k8s/
         run: |
-          sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/deployment.yaml # Replace IMAGE_TAG with the actual image tag in ACR
+          sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/02-deployment.yml # Replace IMAGE_TAG with the actual image tag in ACR
           kubectl apply -f k8s/
       # - name: Deploy Taskly to Staging
       #   run: |
