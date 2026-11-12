@@ -21,7 +21,7 @@ spec:
       containers:
         - name: taskly-container
 
-          image: tasklyacryogesh.azurecr.io/taskly:latest
+          image: tasklyacryogesh.azurecr.io/taskly:IMAGE_TAG
 
           imagePullPolicy: Always
 
